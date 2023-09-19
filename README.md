@@ -36,5 +36,9 @@ You can also set the number of samples to label at each iteration.
 
 Queries the active learner for the next samples to label. Tag the samples whose
 predicted labels are incorrect. Untagged samples will be treated as correct
-predictions. The active learner will then be retrained on the newly labeled
+predictions.
+
+### `update_learner_predictions`
+
+The active learner will be retrained on the newly labeled
 samples, and the predictions field will be updated.
