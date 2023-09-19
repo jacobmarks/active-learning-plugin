@@ -8,6 +8,7 @@ from modAL.batch import uncertainty_batch_sampling
 import fiftyone as fo
 from fiftyone import ViewField as F
 
+
 def get_cache():
     g = globals()
     if "_active_learning" not in g:
@@ -17,17 +18,17 @@ def get_cache():
 
 
 def initialize_learner(
-        dataset, 
-        embeddings_field,
-        labels_field,
-        batch_size=5,
-        ):
+    dataset,
+    embeddings_field,
+    labels_field,
+    batch_size=5,
+):
     """Initialize a learner."""
     tagged_samples = dataset.match(F("tags").length() > 0)
     sample_ids = tagged_samples.values("id")
 
     all_sample_ids = dataset.values("id")
-    
+
     labeled_view = dataset.select(sample_ids, ordered=True)
     X_init = np.array(labeled_view.values(embeddings_field))
     labeled_ids = labeled_view.values("id")
@@ -40,7 +41,8 @@ def initialize_learner(
 
     learner = ActiveLearner(
         estimator=RandomForestClassifier(),
-        X_training=X_init, y_training=y_init,
+        X_training=X_init,
+        y_training=y_init,
         query_strategy=uncertainty_batch_sampling,
     )
 
@@ -84,7 +86,7 @@ def _get_label(sample):
         label_class = sample[labels_field].label
     else:
         label_class = sample_tags[0]
-        
+
     return labels_map[label_class]
 
 
@@ -100,7 +102,9 @@ def teach_learner(dataset):
     X_new = np.array(query_view.values(embeddings_field))
     y_new = np.array([_get_label(sample) for sample in query_view])
     learner.teach(X_new, y_new)
-    cache["unqueried_ids"] = [id for id in unqueried_ids if id not in query_ids]
+    cache["unqueried_ids"] = [
+        id for id in unqueried_ids if id not in query_ids
+    ]
 
 
 def predict(dataset):
@@ -118,9 +122,9 @@ def predict(dataset):
 
     if labels_field not in dataset:
         dataset.add_sample_field(
-            labels_field, 
-            fo.EmbeddedDocumentField, 
-            embedded_doc_type=fo.Classification
-            )
+            labels_field,
+            fo.EmbeddedDocumentField,
+            embedded_doc_type=fo.Classification,
+        )
     dataset.set_values(labels_field, vals)
     dataset.add_dynamic_sample_fields()

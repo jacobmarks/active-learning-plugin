@@ -26,7 +26,12 @@ TEAMS_DEPLOYMENT = _is_teams_deployment()
 if not TEAMS_DEPLOYMENT:
     with add_sys_path(os.path.dirname(os.path.abspath(__file__))):
         # pylint: disable=no-name-in-module,import-error
-        from active_learning import initialize_learner, query_learner, teach_learner, predict
+        from active_learning import (
+            initialize_learner,
+            query_learner,
+            teach_learner,
+            predict,
+        )
 
 
 def get_vector_fields(dataset):
@@ -47,18 +52,18 @@ def serialize_view(view):
 def _ensure_embeddings(vector_fields, inputs):
     if len(vector_fields) == 0:
         inputs.view(
-            "warning", 
+            "warning",
             types.Warning(
-                label="No Embeddings", 
+                label="No Embeddings",
                 description=(
                     "To use active learning, you must embeddings on your dataset."
                     " You can create one by running `dataset.compute_embeddings()`."
-                )
-            )
+                ),
+            ),
         )
         return False
     return True
-    
+
 
 class CreateLearner(foo.Operator):
     @property
@@ -74,11 +79,12 @@ class CreateLearner(foo.Operator):
     def resolve_input(self, ctx):
         inputs = types.Object()
         form_view = types.View(
-            label="Active Learning", description="Label samples with Active Learning"
+            label="Active Learning",
+            description="Label samples with Active Learning",
         )
         if TEAMS_DEPLOYMENT:
             return types.Property(inputs, view=form_view)
-        
+
         vector_fields = get_vector_fields(ctx.dataset)
         if not _ensure_embeddings(vector_fields, inputs):
             return types.Property(inputs, view=form_view)
@@ -108,7 +114,7 @@ class CreateLearner(foo.Operator):
             batch_size=batch_size,
         )
         return
-    
+
 
 class QueryLearner(foo.Operator):
     @property
@@ -124,11 +130,12 @@ class QueryLearner(foo.Operator):
     def resolve_input(self, ctx):
         inputs = types.Object()
         form_view = types.View(
-            label="Active Learning", description="Label samples with Active Learning"
+            label="Active Learning",
+            description="Label samples with Active Learning",
         )
         if TEAMS_DEPLOYMENT:
             return types.Property(inputs, view=form_view)
-        
+
         vector_fields = get_vector_fields(ctx.dataset)
         if not _ensure_embeddings(vector_fields, inputs):
             return types.Property(inputs, view=form_view)
@@ -143,7 +150,7 @@ class QueryLearner(foo.Operator):
             params=dict(view=serialize_view(view)),
         )
         return
-    
+
 
 class TeachLearner(foo.Operator):
     @property
@@ -159,11 +166,12 @@ class TeachLearner(foo.Operator):
     def resolve_input(self, ctx):
         inputs = types.Object()
         form_view = types.View(
-            label="Active Learning", description="Label samples with Active Learning"
+            label="Active Learning",
+            description="Label samples with Active Learning",
         )
         if TEAMS_DEPLOYMENT:
             return types.Property(inputs, view=form_view)
-        
+
         vector_fields = get_vector_fields(ctx.dataset)
         if not _ensure_embeddings(vector_fields, inputs):
             return types.Property(inputs, view=form_view)
@@ -173,9 +181,9 @@ class TeachLearner(foo.Operator):
     def execute(self, ctx):
         teach_learner(ctx.dataset)
         predict(ctx.dataset)
-        ctx.trigger('reload_dataset')
+        ctx.trigger("reload_dataset")
         return
-    
+
 
 def register(plugin):
     plugin.register(CreateLearner)
