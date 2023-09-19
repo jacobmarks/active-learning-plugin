@@ -1,0 +1,10 @@
+fiftyone:
+  version: "~0.21.0"
+name: "@jacobmarks/active_learning"
+version: "1.0.0"
+description: "Active learning-based classification"
+url: "https://github.com/jacobmarks/active-learning-plugin/blob/main/README.md"
+operators:
+  - create_learner
+  - query_learner
+  - update_learner_predictions
