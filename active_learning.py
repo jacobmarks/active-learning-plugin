@@ -55,15 +55,18 @@ def initialize_learner(
     cache["unqueried_ids"] = unqueried_ids
     cache["batch_size"] = batch_size
 
+    ## Set the initial predictions
+    predict(dataset)
 
-def query_learner(dataset):
+
+def query_learner(dataset, batch_size=None):
     """Query the learner."""
     cache = get_cache()
     learner = cache["learner"]
     embeddings_field = cache["embeddings_field"]
-    # labels_field = cache["labels_field"]
     unqueried_ids = cache["unqueried_ids"]
-    batch_size = cache["batch_size"]
+    if batch_size is None:
+        batch_size = cache["batch_size"]
 
     unqueried_view = dataset.select(unqueried_ids, ordered=True)
     X_pool = np.array(unqueried_view.values(embeddings_field))

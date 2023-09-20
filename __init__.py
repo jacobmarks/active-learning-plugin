@@ -65,6 +65,35 @@ def _ensure_embeddings(vector_fields, inputs):
     return True
 
 
+def _ensure_tags(dataset, inputs):
+    unique_tags = dataset.distinct("tags")
+    if len(unique_tags) == 0:
+        inputs.view(
+            "warning",
+            types.Warning(
+                label="No Tags",
+                description=(
+                    "To use active learning, you must have tags on your dataset."
+                    " These are used as initial labels."
+                ),
+            ),
+        )
+        return False
+    elif len(unique_tags) == 1:
+        inputs.view(
+            "warning",
+            types.Warning(
+                label="Only One Tag",
+                description=(
+                    "To use active learning, you must have at least two tags on your dataset."
+                    " These are used as initial labels."
+                ),
+            ),
+        )
+        return False
+    return True
+
+
 class CreateLearner(foo.Operator):
     @property
     def config(self):
@@ -89,15 +118,21 @@ class CreateLearner(foo.Operator):
         if not _ensure_embeddings(vector_fields, inputs):
             return types.Property(inputs, view=form_view)
 
-        field_dropdown = types.AutocompleteView(label="Embedding Field")
-        for vf in vector_fields:
-            field_dropdown.add_choice(vf, label=vf)
+        if not _ensure_tags(ctx.dataset, inputs):
+            return types.Property(inputs, view=form_view)
 
-        inputs.enum(
-            "embeddings_field",
-            field_dropdown.values(),
-            view=field_dropdown,
-        )
+        if len(vector_fields) == 1:
+            ctx.params["embeddings_field"] = vector_fields[0]
+        else:
+            field_dropdown = types.AutocompleteView(label="Embedding Field")
+            for vf in vector_fields:
+                field_dropdown.add_choice(vf, label=vf)
+
+            inputs.enum(
+                "embeddings_field",
+                field_dropdown.values(),
+                view=field_dropdown,
+            )
 
         inputs.str("labels_field", label="Labels field", required=True)
         inputs.int("batch_size", label="Batch size", default=5)
@@ -113,7 +148,7 @@ class CreateLearner(foo.Operator):
             labels_field,
             batch_size=batch_size,
         )
-        return
+        ctx.trigger("reload_dataset")
 
 
 class QueryLearner(foo.Operator):
@@ -140,10 +175,17 @@ class QueryLearner(foo.Operator):
         if not _ensure_embeddings(vector_fields, inputs):
             return types.Property(inputs, view=form_view)
 
+        inputs.int(
+            "batch_size",
+            label="Batch size",
+            description="Override the batch size for this query",
+            default=None,
+        )
         return types.Property(inputs, view=form_view)
 
     def execute(self, ctx):
-        sample_ids = query_learner(ctx.dataset)
+        batch_size = ctx.params.get("batch_size", None)
+        sample_ids = query_learner(ctx.dataset, batch_size=batch_size)
         view = ctx.dataset.select(sample_ids, ordered=True)
         ctx.trigger(
             "set_view",
