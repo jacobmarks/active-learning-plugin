@@ -65,6 +65,15 @@ def _ensure_embeddings(vector_fields, inputs):
     return True
 
 
+def _get_classification_fields(dataset):
+    classif_fields = []
+    fields = dataset.get_field_schema()
+    for field_name, field_type in fields.items():
+        if "Classification" in str(field_type):
+            classif_fields.append(field_name)
+    return classif_fields
+
+
 def _ensure_tags(dataset, inputs):
     unique_tags = dataset.distinct("tags")
     if len(unique_tags) == 0:
@@ -94,6 +103,135 @@ def _ensure_tags(dataset, inputs):
     return True
 
 
+def _initial_labels_selection(inputs):
+    init_label_choices = types.RadioGroup()
+    init_label_choices.add_choice(
+        "labels",
+        label="Label field",
+        description="Select a field containing labels to use as initial labels",
+    )
+    init_label_choices.add_choice(
+        "tags",
+        label="Tags",
+        description="Use tags as initial labels",
+    )
+    inputs.enum(
+        "init_labels",
+        init_label_choices.values(),
+        view=init_label_choices,
+        default="labels",
+    )
+
+
+def _configure_random_forest_classifier(inputs):
+    inputs.view(
+        "rf_header",
+        types.Header(
+            label="Random Forest Classifier",
+            description="Configure the Random Forest Classifier",
+            divider=True,
+        ),
+    )
+    inputs.int("n_estimators", label="Number of estimators", default=100)
+    inputs.int("max_depth", label="Max depth", default=None)
+    inputs.int("min_samples_split", label="Min samples split", default=2)
+    inputs.int("min_samples_leaf", label="Min samples leaf", default=1)
+
+    criteria_choices = ["gini", "entropy", "log_loss"]
+    criteria_group = types.RadioGroup()
+    for choice in criteria_choices:
+        criteria_group.add_choice(choice, label=choice)
+
+    inputs.enum(
+        "criteria",
+        criteria_group.values(),
+        label="Criteria",
+        description="The function to measure the quality of a split",
+        view=types.DropdownView(),
+        default="gini",
+    )
+
+
+def _configure_gradient_boosting_classifier(inputs):
+    inputs.view(
+        "gb_header",
+        types.Header(
+            label="Gradient Boosting Classifier",
+            description="Configure the Gradient Boosting Classifier",
+            divider=True,
+        ),
+    )
+
+    inputs.int("n_estimators", label="Number of estimators", default=100)
+    inputs.int("max_depth", label="Max depth", default=3)
+    inputs.float("learning_rate", label="Learning rate", default=0.1)
+    inputs.float("subsample", label="Subsample", default=1.0)
+    inputs.float("min_samples_split", label="Min samples split", default=2)
+    inputs.float("min_samples_leaf", label="Min samples leaf", default=1)
+    inputs.float("max_leaf_nodes", label="Max leaf nodes", default=None)
+
+
+def _configure_bagging_classifier(inputs):
+    inputs.view(
+        "bg_header",
+        types.Header(
+            label="Bagging Classifier",
+            description="Configure the Bagging Classifier",
+            divider=True,
+        ),
+    )
+
+    estimator_choices = ["decision_tree", "knn", "svm"]
+    estimator_group = types.RadioGroup()
+    for choice in estimator_choices:
+        estimator_group.add_choice(choice, label=choice)
+
+    inputs.enum(
+        "estimator",
+        estimator_group.values(),
+        label="Base estimator",
+        description="The base estimator to fit on random subsets of the dataset",
+        view=types.DropdownView(),
+        default="decision_tree",
+    )
+
+    inputs.int("n_estimators", label="Number of estimators", default=10)
+    inputs.float("max_samples", label="Max samples", default=1.0)
+    inputs.float("max_features", label="Max features", default=1.0)
+    inputs.bool("bootstrap", label="Bootstrap", default=True)
+    inputs.bool(
+        "bootstrap_features", label="Bootstrap features", default=False
+    )
+
+
+def _configure_adaboost_classifier(inputs):
+    inputs.view(
+        "ab_header",
+        types.Header(
+            label="AdaBoost Classifier",
+            description="Configure the AdaBoost Classifier",
+            divider=True,
+        ),
+    )
+
+    estimator_choices = ["decision_tree", "knn", "svm"]
+    estimator_group = types.RadioGroup()
+    for choice in estimator_choices:
+        estimator_group.add_choice(choice, label=choice)
+
+    inputs.enum(
+        "estimator",
+        estimator_group.values(),
+        label="Base estimator",
+        description="The base estimator from which the boosted ensemble is built.",
+        view=types.DropdownView(),
+        default="decision_tree",
+    )
+
+    inputs.int("n_estimators", label="Number of estimators", default=50)
+    inputs.float("learning_rate", label="Learning rate", default=1.0)
+
+
 class CreateLearner(foo.Operator):
     @property
     def config(self):
@@ -118,9 +256,52 @@ class CreateLearner(foo.Operator):
         if not _ensure_embeddings(vector_fields, inputs):
             return types.Property(inputs, view=form_view)
 
-        if not _ensure_tags(ctx.dataset, inputs):
-            return types.Property(inputs, view=form_view)
+        _initial_labels_selection(inputs)
 
+        if ctx.params.get("init_labels", "labels") == "tags":
+            if not _ensure_tags(ctx.dataset, inputs):
+                return types.Property(inputs, view=form_view)
+        else:
+            classif_fields = _get_classification_fields(ctx.dataset)
+            if len(classif_fields) == 0:
+                inputs.view(
+                    "warning",
+                    types.Warning(
+                        label="No Classification Fields",
+                        description=(
+                            "You must have classification fields on your dataset."
+                        ),
+                    ),
+                )
+
+                return types.Property(inputs, view=form_view)
+            elif len(classif_fields) == 1:
+                cf = classif_fields[0]
+                ctx.params["init_label_field"] = cf
+                inputs.str(
+                    f"init_label_field_message_{cf}",
+                    description=f"Field `{cf}` will be used as initial labels",
+                    view=types.MarkdownView(read_only=True),
+                )
+            else:
+                field_dropdown = types.AutocompleteView(label="Label Field")
+                for cf in classif_fields:
+                    field_dropdown.add_choice(cf, label=cf)
+
+                inputs.enum(
+                    "init_label_field",
+                    field_dropdown.values(),
+                    view=field_dropdown,
+                )
+
+        inputs.view(
+            "features_header",
+            types.Header(
+                label="Input features",
+                description="Select the features to use as input to the model",
+                divider=True,
+            ),
+        )
         if len(vector_fields) == 1:
             ctx.params["embeddings_field"] = vector_fields[0]
         else:
@@ -134,20 +315,61 @@ class CreateLearner(foo.Operator):
                 view=field_dropdown,
             )
 
-        inputs.str("labels_field", label="Labels field", required=True)
+        inputs.view(
+            "learner_header",
+            types.Header(
+                label="Learner Details",
+                description="Configure the learner",
+                divider=True,
+            ),
+        )
+
+        inputs.str(
+            "labels_field",
+            label="Prediction field",
+            description="The field to store the predictions in",
+            required=True,
+        )
         inputs.int("batch_size", label="Batch size", default=5)
+
+        learner_labels = [
+            "Random Forest",
+            "Gradient Boosting",
+            "Bagging",
+            "AdaBoost",
+        ]
+        learner_group = types.RadioGroup()
+        for llabel in learner_labels:
+            learner_group.add_choice(llabel, label=llabel)
+
+        inputs.enum(
+            "classifier_type",
+            learner_group.values(),
+            label="Learner",
+            description="The learner to use",
+            view=types.DropdownView(),
+            default="Random Forest",
+        )
+
+        if (
+            ctx.params.get("classifier_type", "Random Forest")
+            == "Random Forest"
+        ):
+            _configure_random_forest_classifier(inputs)
+        elif (
+            ctx.params.get("classifier_type", "Random Forest")
+            == "Gradient Boosting"
+        ):
+            _configure_gradient_boosting_classifier(inputs)
+        elif ctx.params.get("classifier_type", "Random Forest") == "Bagging":
+            _configure_bagging_classifier(inputs)
+        elif ctx.params.get("classifier_type", "Random Forest") == "AdaBoost":
+            _configure_adaboost_classifier(inputs)
+
         return types.Property(inputs, view=form_view)
 
     def execute(self, ctx):
-        embeddings_field = ctx.params["embeddings_field"]
-        labels_field = ctx.params["labels_field"]
-        batch_size = ctx.params["batch_size"]
-        initialize_learner(
-            ctx.dataset,
-            embeddings_field,
-            labels_field,
-            batch_size=batch_size,
-        )
+        initialize_learner(ctx)
         ctx.trigger("reload_dataset")
 
 
