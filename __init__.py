@@ -56,7 +56,6 @@ def _get_candidate_feature_fields(dataset):
 
 
 def _ensure_feature_fields(cand_feature_fields, inputs):
-    # cand_feature_fields = _get_candidate_feature_fields(dataset)
     if len(cand_feature_fields) == 0:
         inputs.view(
             "warning",
