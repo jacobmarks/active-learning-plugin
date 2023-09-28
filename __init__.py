@@ -259,6 +259,17 @@ class CreateLearner(foo.Operator):
             label="Active Learning",
             description="Label samples with Active Learning",
         )
+
+        inputs.view(
+            "readme",
+            types.Warning(
+                label="Documentation",
+                description=(
+                    "Want details on how to use this plugin? Check out the"
+                    "plugin's GitHub repo at https://github.com/jacobmarks/active-learning-plugin"
+                ),
+            ),
+        )
         if TEAMS_DEPLOYMENT:
             return types.Property(inputs, view=form_view)
 
