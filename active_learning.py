@@ -128,11 +128,26 @@ def _create_classifier(ctx):
         raise ValueError("Unknown classifier type '%s'" % classifier_type)
 
 
+def _get_features(view, feature_fields):
+    """Get the features of a view."""
+    feature_vals = view.values(feature_fields)
+    feature_vals = [np.array(fv) for fv in feature_vals]
+    reshaped_feature_vals = []
+    for fv in feature_vals:
+        if len(fv.shape) == 1:
+            reshaped_feature_vals.append(fv[:, np.newaxis])
+        else:
+            reshaped_feature_vals.append(fv)
+
+    reshaped_feature_vals = np.concatenate(reshaped_feature_vals, axis=1)
+    return reshaped_feature_vals
+
+
 def initialize_learner(ctx):
     """Initialize a learner."""
 
     classifier = _create_classifier(ctx)
-    embeddings_field = ctx.params["embeddings_field"]
+    feature_fields = ctx.params["feature_fields"]
     labels_field = ctx.params["labels_field"]
     batch_size = ctx.params["batch_size"]
 
@@ -145,7 +160,7 @@ def initialize_learner(ctx):
         tagged_samples = dataset.match(F("tags").length() > 0)
         sample_ids = tagged_samples.values("id")
         labeled_view = dataset.select(sample_ids, ordered=True)
-        X_init = np.array(labeled_view.values(embeddings_field))
+        X_init = _get_features(labeled_view, feature_fields)
         labeled_ids = labeled_view.values("id")
         unqueried_ids = [id for id in all_sample_ids if id not in labeled_ids]
         labels = labeled_view.values(F("tags")[0])
@@ -154,7 +169,7 @@ def initialize_learner(ctx):
         ### Don't assume labels are correct
         init_label_field = ctx.params["init_label_field"]
         labeled_view = dataset.match(F(f"{init_label_field}.label"))
-        X_init = np.array(labeled_view.values(embeddings_field))
+        X_init = _get_features(labeled_view, feature_fields)
         unqueried_ids = all_sample_ids
         labels = labeled_view.values(f"{init_label_field}.label")
 
@@ -173,7 +188,7 @@ def initialize_learner(ctx):
     cache["labels_map"] = labels_map
     cache["all_sample_ids"] = all_sample_ids
     cache["learner"] = learner
-    cache["embeddings_field"] = embeddings_field
+    cache["feature_fields"] = feature_fields
     cache["labels_field"] = labels_field
     cache["unqueried_ids"] = unqueried_ids
     cache["batch_size"] = batch_size
@@ -186,13 +201,13 @@ def query_learner(dataset, batch_size=None):
     """Query the learner."""
     cache = get_cache()
     learner = cache["learner"]
-    embeddings_field = cache["embeddings_field"]
+    feature_fields = cache["feature_fields"]
     unqueried_ids = cache["unqueried_ids"]
     if batch_size is None:
         batch_size = cache["batch_size"]
 
     unqueried_view = dataset.select(unqueried_ids, ordered=True)
-    X_pool = np.array(unqueried_view.values(embeddings_field))
+    X_pool = _get_features(unqueried_view, feature_fields)
     query_idx, _ = learner.query(X_pool, n_instances=batch_size)
 
     uvids = unqueried_view.values("id")
@@ -220,12 +235,12 @@ def teach_learner(dataset):
     """Teach the learner."""
     cache = get_cache()
     learner = cache["learner"]
-    embeddings_field = cache["embeddings_field"]
+    feature_fields = cache["feature_fields"]
     unqueried_ids = cache["unqueried_ids"]
     query_ids = cache["_current_query_ids"]
 
     query_view = dataset.select(query_ids, ordered=True)
-    X_new = np.array(query_view.values(embeddings_field))
+    X_new = _get_features(query_view, feature_fields)
     y_new = np.array([_get_label(sample) for sample in query_view])
     learner.teach(X_new, y_new)
     cache["unqueried_ids"] = [
@@ -237,10 +252,10 @@ def predict(dataset):
     """Predict on the dataset."""
     cache = get_cache()
     learner = cache["learner"]
-    embeddings_field = cache["embeddings_field"]
+    feature_fields = cache["feature_fields"]
     labels_field = cache["labels_field"]
 
-    X = np.array(dataset.values(embeddings_field))
+    X = _get_features(dataset, feature_fields)
     y_pred = learner.predict(X)
     y_pred = [list(cache["labels_map"].keys())[i] for i in y_pred]
 

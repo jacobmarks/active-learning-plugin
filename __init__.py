@@ -6,6 +6,7 @@
 """
 
 import json
+import numpy as np
 import os
 
 from bson import json_util
@@ -45,24 +46,35 @@ def get_vector_fields(dataset):
     return vector_fields
 
 
-def serialize_view(view):
-    return json.loads(json_util.dumps(view._serialize()))
+def _get_candidate_feature_fields(dataset):
+    sample = dataset.first()
+    fields = []
+    for fn in sample.field_names:
+        if sample[fn].__class__ in [float, np.ndarray]:
+            fields.append(fn)
+    return fields
 
 
-def _ensure_embeddings(vector_fields, inputs):
-    if len(vector_fields) == 0:
+def _ensure_feature_fields(cand_feature_fields, inputs):
+    # cand_feature_fields = _get_candidate_feature_fields(dataset)
+    if len(cand_feature_fields) == 0:
         inputs.view(
             "warning",
             types.Warning(
-                label="No Embeddings",
+                label="No Feature Fields",
                 description=(
-                    "To use active learning, you must embeddings on your dataset."
-                    " You can create one by running `dataset.compute_embeddings()`."
+                    "You must have float fields or vector fields on your dataset."
+                    " These will be used as input to the model. You can create"
+                    " a vector field by running `dataset.compute_embeddings()`."
                 ),
             ),
         )
         return False
     return True
+
+
+def serialize_view(view):
+    return json.loads(json_util.dumps(view._serialize()))
 
 
 def _get_classification_fields(dataset):
@@ -82,8 +94,7 @@ def _ensure_tags(dataset, inputs):
             types.Warning(
                 label="No Tags",
                 description=(
-                    "To use active learning, you must have tags on your dataset."
-                    " These are used as initial labels."
+                    "You must have at least two distinct tags on your dataset."
                 ),
             ),
         )
@@ -252,8 +263,8 @@ class CreateLearner(foo.Operator):
         if TEAMS_DEPLOYMENT:
             return types.Property(inputs, view=form_view)
 
-        vector_fields = get_vector_fields(ctx.dataset)
-        if not _ensure_embeddings(vector_fields, inputs):
+        cand_feature_fields = _get_candidate_feature_fields(ctx.dataset)
+        if not _ensure_feature_fields(cand_feature_fields, inputs):
             return types.Property(inputs, view=form_view)
 
         _initial_labels_selection(inputs)
@@ -302,18 +313,36 @@ class CreateLearner(foo.Operator):
                 divider=True,
             ),
         )
-        if len(vector_fields) == 1:
-            ctx.params["embeddings_field"] = vector_fields[0]
-        else:
-            field_dropdown = types.AutocompleteView(label="Embedding Field")
-            for vf in vector_fields:
-                field_dropdown.add_choice(vf, label=vf)
 
-            inputs.enum(
-                "embeddings_field",
-                field_dropdown.values(),
-                view=field_dropdown,
-            )
+        if len(cand_feature_fields) == 1:
+            ctx.params["feature_fields"] = cand_feature_fields
+        else:
+            for ff in cand_feature_fields:
+                inputs.bool(ff, label=ff, default=False)
+
+            feature_fields = ctx.params.get("feature_fields", [])
+            if len(feature_fields) == 0:
+                cand_feature_fields = _get_candidate_feature_fields(
+                    ctx.dataset
+                )
+                feature_fields = [
+                    cf
+                    for cf in cand_feature_fields
+                    if ctx.params.get(cf, False)
+                ]
+                ctx.params["feature_fields"] = feature_fields
+
+            if len(feature_fields) == 0:
+                inputs.view(
+                    "warning",
+                    types.Warning(
+                        label="No input features",
+                        description=(
+                            "You must select at least one input feature. If you"
+                            "select more than one, they will be concatenated."
+                        ),
+                    ),
+                )
 
         inputs.view(
             "learner_header",
@@ -393,10 +422,6 @@ class QueryLearner(foo.Operator):
         if TEAMS_DEPLOYMENT:
             return types.Property(inputs, view=form_view)
 
-        vector_fields = get_vector_fields(ctx.dataset)
-        if not _ensure_embeddings(vector_fields, inputs):
-            return types.Property(inputs, view=form_view)
-
         inputs.int(
             "batch_size",
             label="Batch size",
@@ -436,8 +461,8 @@ class TeachLearner(foo.Operator):
         if TEAMS_DEPLOYMENT:
             return types.Property(inputs, view=form_view)
 
-        vector_fields = get_vector_fields(ctx.dataset)
-        if not _ensure_embeddings(vector_fields, inputs):
+        cand_feature_fields = _get_candidate_feature_fields(ctx.dataset)
+        if not _ensure_feature_fields(cand_feature_fields, inputs):
             return types.Property(inputs, view=form_view)
 
         return types.Property(inputs, view=form_view)
