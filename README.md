@@ -20,7 +20,7 @@ fiftyone plugins download https://github.com/jacobmarks/active-learning-plugin
 Then install the requirements:
 
 ```shell
-fiftyone plugins requirements @jacobmarks/active-learning-plugin --install
+fiftyone plugins requirements @jacobmarks/active_learning --install
 ```
 
 ## Operators
