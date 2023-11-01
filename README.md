@@ -11,6 +11,10 @@ This FiftyOne plugin brings Active Learning to your computer vision data using t
 
 The best part? You can use this in tandem with your traditional annotation service providers (via FiftyOne’s integrations with CVAT, Labelbox and Label Studio), or even with the FiftyOne [Zero-shot Prediction plugin](https://github.com/jacobmarks/zero-shot-prediction-plugin)!
 
+## Watch On Youtube
+[![Video Thumbnail](https://img.youtube.com/vi/j4z5zlfO3Pc/0.jpg)](https://www.youtube.com/watch?v=j4z5zlfO3Pc&list=PLuREAXoPgT0RZrUaT0UpX_HzwKkoB-S9j&index=8)
+
+
 ## Installation
 
 ```shell
