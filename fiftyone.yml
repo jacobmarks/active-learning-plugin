@@ -1,7 +1,7 @@
 fiftyone:
-  version: ">=0.21.0"
+  version: ">=0.23.7"
 name: "@jacobmarks/active_learning"
-version: "1.0.1"
+version: "1.0.2"
 description: "Active learning-based classification"
 url: "https://github.com/jacobmarks/active-learning-plugin/blob/main/README.md"
 operators:

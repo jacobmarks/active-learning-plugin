@@ -409,7 +409,7 @@ class CreateLearner(foo.Operator):
 
     def execute(self, ctx):
         initialize_learner(ctx)
-        ctx.trigger("reload_dataset")
+        ctx.ops.reload_dataset()
 
 
 class QueryLearner(foo.Operator):
@@ -480,7 +480,7 @@ class TeachLearner(foo.Operator):
     def execute(self, ctx):
         teach_learner(ctx.dataset)
         predict(ctx.dataset)
-        ctx.trigger("reload_dataset")
+        ctx.ops.reload_dataset()
         return
 
 
